@@ -20,6 +20,8 @@ This project does **not** promise profit. It is built to test whether a strategy
 
 ```powershell
 python -m forex_bot.main backtest --data sample_data\EUR_USD_H1.csv
+python tools\generate_demo_data.py
+python -m forex_bot.main backtest --data sample_data\EUR_USD_DEMO_H1.csv --fast-sma 10 --slow-sma 40 --reward-risk 2.5
 python -m forex_bot.main optimize --data path\to\historical\EUR_USD_H1.csv
 python -m forex_bot.main walk-forward --data path\to\historical\EUR_USD_H1.csv
 python -m unittest discover tests
