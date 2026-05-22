@@ -1,0 +1,9 @@
+[project]
+name = "forex-algo-bot"
+version = "0.1.0"
+description = "Risk-first Forex trading bot scaffold for backtesting and paper trading"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
