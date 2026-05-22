@@ -23,6 +23,42 @@ class BacktestResult:
         wins = sum(1 for trade in self.trades if trade.pnl > 0)
         return wins / len(self.trades) * 100.0
 
+    @property
+    def gross_profit(self) -> float:
+        return sum(trade.pnl for trade in self.trades if trade.pnl > 0)
+
+    @property
+    def gross_loss(self) -> float:
+        return abs(sum(trade.pnl for trade in self.trades if trade.pnl < 0))
+
+    @property
+    def profit_factor(self) -> float:
+        if self.gross_loss == 0:
+            return float("inf") if self.gross_profit > 0 else 0.0
+        return self.gross_profit / self.gross_loss
+
+    @property
+    def average_win(self) -> float:
+        wins = [trade.pnl for trade in self.trades if trade.pnl > 0]
+        return sum(wins) / len(wins) if wins else 0.0
+
+    @property
+    def average_loss(self) -> float:
+        losses = [trade.pnl for trade in self.trades if trade.pnl < 0]
+        return sum(losses) / len(losses) if losses else 0.0
+
+    @property
+    def max_consecutive_losses(self) -> int:
+        worst = 0
+        current = 0
+        for trade in self.trades:
+            if trade.pnl < 0:
+                current += 1
+                worst = max(worst, current)
+            else:
+                current = 0
+        return worst
+
 
 class Backtester:
     def __init__(
