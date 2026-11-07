@@ -71,10 +71,20 @@ class Backtester:
         self.risk = RiskManager(risk_config)
         self.execution = execution_config or ExecutionConfig()
 
-    def run(self, candles: list[Candle]) -> BacktestResult:
+    def run(self, candles: list[Candle], *, warmup: list[Candle] | None = None) -> BacktestResult:
         if not candles:
             raise ValueError("Need at least one candle")
-        signals = self.strategy.generate_signals(candles)
+        from math import isfinite
+        history = list(warmup or []) + candles
+        for i, c in enumerate(history):
+            if c.time.utcoffset() is None or (i and c.time <= history[i - 1].time):
+                raise ValueError("Require timezone-aware, strictly increasing timestamps")
+            if not all(isfinite(v) and v > 0 for v in (c.open, c.high, c.low, c.close)):
+                raise ValueError("Invalid price")
+            if not c.low <= min(c.open, c.close) <= max(c.open, c.close) <= c.high:
+                raise ValueError("Invalid OHLC bounds")
+        self.risk = RiskManager(self.risk.config)
+        signals = self.strategy.generate_signals(history)[len(warmup or []):]
         trades: list[Trade] = []
         equity_curve = [self.risk.state.balance]
         open_signal: Signal | None = None
@@ -111,11 +121,23 @@ class Backtester:
             # them on this bar's open, never at the signal bar's close.
             if open_signal is None and pending_signal is not None and self.risk.can_trade():
                 executable = self._entry_at_open(pending_signal, candle)
-                units = self.risk.size_units(executable)
+                units = self.risk.size_units(executable,
+                    exit_cost=self.execution.slippage_pips * self.execution.pip_size)
                 if units > 0:
                     open_signal, open_units, entry_time = executable, units, candle.time
                     self.risk.state.open_trades = 1
             pending_signal = None
+
+            # New positions also have active brackets during their entry bar.
+            if open_signal is not None and entry_time == candle.time:
+                price, reason = self._maybe_exit(open_signal, candle)
+                if price is not None:
+                    pnl = self._pnl(open_signal.side, open_signal.entry, price, open_units)
+                    self.risk.apply_pnl(pnl)
+                    trades.append(Trade(open_signal.side, entry_time, candle.time,
+                                        open_signal.entry, price, open_units, pnl, reason))
+                    self.risk.state.open_trades = 0
+                    open_signal, open_units, entry_time = None, 0, None
 
             signal = signals[index]
             if open_signal is None and signal is not None:
@@ -123,14 +145,15 @@ class Backtester:
 
             equity = self.risk.state.balance
             if open_signal is not None:
-                equity += self._pnl(open_signal.side, open_signal.entry, self._close_price(open_signal.side, candle.close), open_units)
+                equity += self._pnl(open_signal.side, open_signal.entry, self._forced_exit_price(open_signal.side, candle.close), open_units)
             self.risk.mark_equity(equity)
-            if open_signal is not None and self.risk.state.halted:
+            if open_signal is not None and (self.risk.state.halted or self.risk.state.daily_halted or index == len(candles) - 1):
                 exit_price = self._forced_exit_price(open_signal.side, candle.close)
                 pnl = self._pnl(open_signal.side, open_signal.entry, exit_price, open_units)
                 self.risk.apply_pnl(pnl)
                 self.risk.state.open_trades = 0
-                trades.append(Trade(open_signal.side, entry_time, candle.time, open_signal.entry, exit_price, open_units, pnl, "equity_risk_limit"))
+                reason = "equity_risk_limit" if self.risk.state.halted or self.risk.state.daily_halted else "end_of_data"
+                trades.append(Trade(open_signal.side, entry_time, candle.time, open_signal.entry, exit_price, open_units, pnl, reason))
                 open_signal, open_units, entry_time = None, 0, None
                 equity = self.risk.state.balance
             equity_curve.append(equity)
@@ -164,6 +187,10 @@ class Backtester:
         bid_open, bid_high, bid_low = candle.open - half, candle.high - half, candle.low - half
         ask_open, ask_high, ask_low = candle.open + half, candle.high + half, candle.low + half
         if signal.side == Side.BUY:
+            if bid_open <= signal.stop_loss:
+                return bid_open - slip, "stop_loss"
+            if bid_open >= signal.take_profit:
+                return bid_open, "take_profit"
             stop = bid_low <= signal.stop_loss
             target = bid_high >= signal.take_profit
             if stop and (not target or self.execution.intrabar_priority == "stop"):
@@ -171,6 +198,10 @@ class Backtester:
             if target:
                 return max(signal.take_profit, bid_open), "take_profit"
         else:
+            if ask_open >= signal.stop_loss:
+                return ask_open + slip, "stop_loss"
+            if ask_open <= signal.take_profit:
+                return ask_open, "take_profit"
             stop = ask_high >= signal.stop_loss
             target = ask_low <= signal.take_profit
             if stop and (not target or self.execution.intrabar_priority == "stop"):

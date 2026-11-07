@@ -36,25 +36,33 @@ class TrendRsiAtrStrategy:
             if stop_distance <= 0:
                 continue
 
-            crossed_up = fast[index - 1] <= slow[index - 1] and fast[index] > slow[index]  # type: ignore[operator]
-            crossed_down = fast[index - 1] >= slow[index - 1] and fast[index] < slow[index]  # type: ignore[operator]
+            # Enter on a recovery through the fast average within an established
+            # trend, or on its initial crossover. All inputs end at this close.
+            crossed_up = fast[index] > slow[index] and (
+                fast[index - 1] <= slow[index - 1]
+                or closes[index - 1] <= fast[index - 1] < close
+            )
+            crossed_down = fast[index] < slow[index] and (
+                fast[index - 1] >= slow[index - 1]
+                or closes[index - 1] >= fast[index - 1] > close
+            )
 
-            if crossed_up and rsi_values[index] < self.config.long_rsi_ceiling:  # type: ignore[operator]
+            if crossed_up and 50 <= rsi_values[index] < self.config.long_rsi_ceiling:
                 signals[index] = Signal(
                     side=Side.BUY,
                     entry=close,
                     stop_loss=close - stop_distance,
                     take_profit=close + (stop_distance * self.config.reward_risk),
-                    reason="fast_sma_crossed_above_slow_sma",
+                    reason="trend_pullback_recovery_long",
                 )
 
-            if crossed_down and rsi_values[index] > self.config.short_rsi_floor:  # type: ignore[operator]
+            if crossed_down and self.config.short_rsi_floor < rsi_values[index] <= 50:
                 signals[index] = Signal(
                     side=Side.SELL,
                     entry=close,
                     stop_loss=close + stop_distance,
                     take_profit=close - (stop_distance * self.config.reward_risk),
-                    reason="fast_sma_crossed_below_slow_sma",
+                    reason="trend_pullback_recovery_short",
                 )
 
         return signals

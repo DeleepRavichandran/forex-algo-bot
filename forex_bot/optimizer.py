@@ -62,7 +62,7 @@ def walk_forward(candles: list[Candle], train_fraction: float = 0.7) -> tuple[Op
         raise ValueError("Need more candles for walk-forward validation")
 
     best = optimize(train)[0]
-    out_of_sample = Backtester(strategy=TrendRsiAtrStrategy(best.config)).run(test)
+    out_of_sample = Backtester(strategy=TrendRsiAtrStrategy(best.config)).run(test, warmup=train)
     return best, out_of_sample
 
 
@@ -73,8 +73,8 @@ def rolling_walk_forward(
     if train_size < 100 or test_size < 1:
         raise ValueError("train_size must be >= 100 and test_size must be positive")
     step = test_size if step_size is None else step_size
-    if step < 1:
-        raise ValueError("step_size must be positive")
+    if step < test_size:
+        raise ValueError("Test windows must not overlap")
     folds: list[WalkForwardFold] = []
     for test_start in range(train_size, len(candles) - test_size + 1, step):
         train = candles[test_start - train_size : test_start]
@@ -83,7 +83,7 @@ def rolling_walk_forward(
         if not candidates:
             continue
         selected = candidates[0]
-        result = Backtester(strategy=TrendRsiAtrStrategy(selected.config)).run(test)
+        result = Backtester(strategy=TrendRsiAtrStrategy(selected.config)).run(test, warmup=train)
         folds.append(WalkForwardFold(test_start - train_size, test_start, test_start, test_start + test_size, selected, result))
     if not folds:
         raise ValueError("Need enough candles for at least one walk-forward fold")

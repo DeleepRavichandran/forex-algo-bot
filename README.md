@@ -6,6 +6,8 @@ This project does **not** promise profit. It is built to test whether a strategy
 
 ## What is included
 
+See [research assumptions and limitations](RESEARCH_LIMITATIONS.md) before interpreting results.
+
 - CSV market data loader
 - Indicator utilities: SMA, RSI, ATR
 - Trend-following strategy with volatility and RSI filters

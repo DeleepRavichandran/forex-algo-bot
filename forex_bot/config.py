@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 
 
 @dataclass(frozen=True)
@@ -13,6 +14,14 @@ class StrategyConfig:
     reward_risk: float = 2.0
     long_rsi_ceiling: float = 68.0
     short_rsi_floor: float = 32.0
+
+    def __post_init__(self):
+        if not 0 < self.fast_sma < self.slow_sma or min(self.rsi_period, self.atr_period) < 1:
+            raise ValueError("Invalid indicator periods")
+        if not all(isfinite(v) and v > 0 for v in (self.atr_stop_multiple, self.reward_risk)):
+            raise ValueError("Invalid stop/reward multiples")
+        if not 0 <= self.short_rsi_floor < 50 < self.long_rsi_ceiling <= 100:
+            raise ValueError("Invalid RSI thresholds")
 
 
 @dataclass(frozen=True)
@@ -28,6 +37,15 @@ class RiskConfig:
     quote_to_account_rate: float = 1.0
     max_drawdown: float = 0.10
 
+    def __post_init__(self):
+        if not all(isfinite(v) and v > 0 for v in (self.starting_balance, self.quote_to_account_rate)):
+            raise ValueError("Invalid balance or currency conversion")
+        if not all(isfinite(v) and 0 < v < 1 for v in
+                   (self.risk_per_trade, self.max_daily_loss, self.max_drawdown)):
+            raise ValueError("Risk fractions must be between zero and one")
+        if self.max_units < 1 or self.max_open_trades != 1:
+            raise ValueError("Single-position engine requires max_open_trades=1 and positive max_units")
+
 
 @dataclass(frozen=True)
 class ExecutionConfig:
@@ -36,3 +54,9 @@ class ExecutionConfig:
     pip_size: float = 0.0001
     # Candles are mid prices. Spread is applied as bid=mid-half and ask=mid+half.
     intrabar_priority: str = "stop"  # conservative when stop and target touch
+
+    def __post_init__(self):
+        if not all(isfinite(v) and v >= 0 for v in (self.spread_pips, self.slippage_pips)):
+            raise ValueError("Invalid execution costs")
+        if not isfinite(self.pip_size) or self.pip_size <= 0 or self.intrabar_priority != "stop":
+            raise ValueError("Require positive pip size and conservative stop priority")

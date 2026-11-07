@@ -25,7 +25,10 @@ class ExecutionAdversarialTests(unittest.TestCase):
     def test_entry_waits_for_next_open(self):
         signal = Signal(Side.BUY, 1.1, 1.09, 1.12, "test")
         result = self._run([_candle(0, 1.1, 1.1, 1.1, 1.1), _candle(1, 1.2, 1.201, 1.199, 1.2)], signal)
-        self.assertEqual(result.trades, [])  # did not enter/fill on bar 0
+        self.assertEqual(len(result.trades), 1)
+        self.assertEqual(result.trades[0].entry_time, _candle(1, 1, 1, 1, 1).time)
+        self.assertAlmostEqual(result.trades[0].entry, 1.2002)
+        self.assertEqual(result.trades[0].reason, "end_of_data")
 
     def test_buy_stop_gap_uses_worse_bid_open_and_slippage(self):
         signal = Signal(Side.BUY, 1.1, 1.09, 1.12, "test")
@@ -38,12 +41,13 @@ class ExecutionAdversarialTests(unittest.TestCase):
         result = self._run([_candle(0, 1.1, 1.1, 1.1, 1.1), _candle(1, 1.1, 1.101, 1.099, 1.1), _candle(2, 1.1, 1.12, 1.08, 1.1)], signal)
         self.assertEqual(result.trades[0].reason, "stop_loss")
 
-    def test_equity_drawdown_liquidates_and_halts(self):
+    def test_size_respects_remaining_drawdown_budget(self):
         signal = Signal(Side.BUY, 1.1, 1.0, 1.3, "test")
         result = self._run(
             [_candle(0, 1.1, 1.1, 1.1, 1.1), _candle(1, 1.1, 1.101, 1.099, 1.1), _candle(2, 1.08, 1.081, 1.079, 1.08)],
             signal,
             max_drawdown=0.001,
         )
-        self.assertEqual(result.trades[0].reason, "equity_risk_limit")
+        self.assertEqual(result.trades[0].reason, "end_of_data")
+        self.assertLess(abs(result.trades[0].pnl), 10)
 
