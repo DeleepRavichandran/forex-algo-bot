@@ -8,6 +8,8 @@ from forex_bot.config import StrategyConfig
 from forex_bot.data import load_candles_csv
 from forex_bot.optimizer import optimize, rolling_walk_forward, walk_forward
 from forex_bot.strategy import TrendRsiAtrStrategy
+from forex_bot.breakout import ChannelBreakoutStrategy
+from forex_bot.config import RiskConfig
 
 
 def main() -> None:
@@ -17,6 +19,7 @@ def main() -> None:
     backtest_parser = subparsers.add_parser("backtest", help="Run a CSV backtest")
     backtest_parser.add_argument("--data", required=True, type=Path, help="CSV with time,open,high,low,close")
     _add_strategy_args(backtest_parser)
+    backtest_parser.add_argument("--strategy", choices=["trend-rsi", "breakout"], default="trend-rsi")
 
     optimize_parser = subparsers.add_parser("optimize", help="Grid-search strategy parameters")
     optimize_parser.add_argument("--data", required=True, type=Path, help="CSV with time,open,high,low,close")
@@ -28,7 +31,13 @@ def main() -> None:
 
     if args.command == "backtest":
         candles = load_candles_csv(args.data)
-        result = Backtester(strategy=TrendRsiAtrStrategy(_strategy_config_from_args(args))).run(candles)
+        if args.strategy == "breakout":
+            strategy = ChannelBreakoutStrategy()
+            risk = RiskConfig(risk_per_trade=0.0025, max_daily_loss=0.01, max_drawdown=0.05)
+        else:
+            strategy = TrendRsiAtrStrategy(_strategy_config_from_args(args))
+            risk = RiskConfig()
+        result = Backtester(strategy=strategy, risk_config=risk).run(candles)
         _print_result(result)
 
     if args.command == "optimize":
