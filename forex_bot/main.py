@@ -6,7 +6,7 @@ from pathlib import Path
 from forex_bot.backtest import Backtester
 from forex_bot.config import StrategyConfig
 from forex_bot.data import load_candles_csv
-from forex_bot.optimizer import optimize, walk_forward
+from forex_bot.optimizer import optimize, rolling_walk_forward, walk_forward
 from forex_bot.strategy import TrendRsiAtrStrategy
 
 
@@ -43,12 +43,12 @@ def main() -> None:
 
     if args.command == "walk-forward":
         candles = load_candles_csv(args.data)
-        best, out_of_sample = walk_forward(candles)
-        print("Best in-sample config:")
-        print(best.config)
-        print()
-        print("Out-of-sample result:")
-        _print_result(out_of_sample)
+        folds = rolling_walk_forward(candles)
+        print("Chronological walk-forward folds (not a profitability claim):")
+        for fold in folds:
+            print(f"train={fold.train_start}:{fold.train_end} test={fold.test_start}:{fold.test_end} "
+                  f"return={fold.out_of_sample.total_return_pct:.2f}% dd={fold.out_of_sample.max_drawdown_pct:.2f}% "
+                  f"trades={len(fold.out_of_sample.trades)}")
 
 
 def _print_result(result: object) -> None:

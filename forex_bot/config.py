@@ -22,6 +22,11 @@ class RiskConfig:
     max_daily_loss: float = 0.02
     max_open_trades: int = 1
     max_units: int = 100_000
+    account_currency: str = "USD"
+    # Number of account-currency units per one quote-currency unit.  Supply an
+    # historical rate for cross-currency studies rather than assuming parity.
+    quote_to_account_rate: float = 1.0
+    max_drawdown: float = 0.10
 
 
 @dataclass(frozen=True)
@@ -29,3 +34,5 @@ class ExecutionConfig:
     spread_pips: float = 1.2
     slippage_pips: float = 0.2
     pip_size: float = 0.0001
+    # Candles are mid prices. Spread is applied as bid=mid-half and ask=mid+half.
+    intrabar_priority: str = "stop"  # conservative when stop and target touch
