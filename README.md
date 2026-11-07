@@ -6,12 +6,15 @@ This project does **not** promise profit. It is built to test whether a strategy
 
 ## What is included
 
+See [research assumptions and limitations](RESEARCH_LIMITATIONS.md) before interpreting results.
+
 - CSV market data loader
 - Indicator utilities: SMA, RSI, ATR
 - Trend-following strategy with volatility and RSI filters
 - Position sizing and risk limits
-- Backtester with spread/slippage modeling
-- Parameter optimization and walk-forward validation
+- Next-bar backtester with bid/ask spread, adverse slippage, gap-aware stop fills, and conservative same-bar collision handling
+- Account-currency-aware sizing, daily loss and equity drawdown circuit breakers
+- Deterministic rolling walk-forward validation and a reproducible synthetic-data benchmark
 - Paper broker for dry runs
 - CLI entry point
 - Unit tests for core behavior
@@ -25,6 +28,8 @@ python -m forex_bot.main backtest --data sample_data\EUR_USD_DEMO_H1.csv --fast-
 python -m forex_bot.main optimize --data path\to\historical\EUR_USD_H1.csv
 python -m forex_bot.main walk-forward --data path\to\historical\EUR_USD_H1.csv
 python -m unittest discover tests
+python tools\generate_demo_data.py
+python tools\benchmark.py
 ```
 
 ## Live trading safety
@@ -35,6 +40,8 @@ Live trading is intentionally not implemented in this first pass. The intended p
 2. Run walk-forward validation.
 3. Paper trade with the intended broker.
 4. Add broker execution only after the strategy survives realistic costs and risk limits.
+
+The benchmark uses generated data and is an execution-regression check only. It is not evidence of profitability. Historical OHLC data cannot establish intrabar order, fill availability, liquidity, financing, broker rejects, or a live trading edge.
 
 ## Example strategy
 

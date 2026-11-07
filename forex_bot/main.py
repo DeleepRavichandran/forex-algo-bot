@@ -6,8 +6,10 @@ from pathlib import Path
 from forex_bot.backtest import Backtester
 from forex_bot.config import StrategyConfig
 from forex_bot.data import load_candles_csv
-from forex_bot.optimizer import optimize, walk_forward
+from forex_bot.optimizer import optimize, rolling_walk_forward, walk_forward
 from forex_bot.strategy import TrendRsiAtrStrategy
+from forex_bot.breakout import ChannelBreakoutStrategy
+from forex_bot.config import RiskConfig
 
 
 def main() -> None:
@@ -17,6 +19,7 @@ def main() -> None:
     backtest_parser = subparsers.add_parser("backtest", help="Run a CSV backtest")
     backtest_parser.add_argument("--data", required=True, type=Path, help="CSV with time,open,high,low,close")
     _add_strategy_args(backtest_parser)
+    backtest_parser.add_argument("--strategy", choices=["trend-rsi", "breakout"], default="trend-rsi")
 
     optimize_parser = subparsers.add_parser("optimize", help="Grid-search strategy parameters")
     optimize_parser.add_argument("--data", required=True, type=Path, help="CSV with time,open,high,low,close")
@@ -28,7 +31,13 @@ def main() -> None:
 
     if args.command == "backtest":
         candles = load_candles_csv(args.data)
-        result = Backtester(strategy=TrendRsiAtrStrategy(_strategy_config_from_args(args))).run(candles)
+        if args.strategy == "breakout":
+            strategy = ChannelBreakoutStrategy()
+            risk = RiskConfig(risk_per_trade=0.0025, max_daily_loss=0.01, max_drawdown=0.05)
+        else:
+            strategy = TrendRsiAtrStrategy(_strategy_config_from_args(args))
+            risk = RiskConfig()
+        result = Backtester(strategy=strategy, risk_config=risk).run(candles)
         _print_result(result)
 
     if args.command == "optimize":
@@ -43,12 +52,12 @@ def main() -> None:
 
     if args.command == "walk-forward":
         candles = load_candles_csv(args.data)
-        best, out_of_sample = walk_forward(candles)
-        print("Best in-sample config:")
-        print(best.config)
-        print()
-        print("Out-of-sample result:")
-        _print_result(out_of_sample)
+        folds = rolling_walk_forward(candles)
+        print("Chronological walk-forward folds (not a profitability claim):")
+        for fold in folds:
+            print(f"train={fold.train_start}:{fold.train_end} test={fold.test_start}:{fold.test_end} "
+                  f"return={fold.out_of_sample.total_return_pct:.2f}% dd={fold.out_of_sample.max_drawdown_pct:.2f}% "
+                  f"trades={len(fold.out_of_sample.trades)}")
 
 
 def _print_result(result: object) -> None:

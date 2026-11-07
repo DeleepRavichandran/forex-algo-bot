@@ -20,6 +20,16 @@ class OptimizationCandidate:
         return self.result.total_return_pct - self.result.max_drawdown_pct - trade_penalty
 
 
+@dataclass(frozen=True)
+class WalkForwardFold:
+    train_start: int
+    train_end: int
+    test_start: int
+    test_end: int
+    selected: OptimizationCandidate
+    out_of_sample: BacktestResult
+
+
 def optimize(candles: list[Candle]) -> list[OptimizationCandidate]:
     candidates: list[OptimizationCandidate] = []
     for fast_sma, slow_sma, atr_multiple, reward_risk in product(
@@ -52,5 +62,29 @@ def walk_forward(candles: list[Candle], train_fraction: float = 0.7) -> tuple[Op
         raise ValueError("Need more candles for walk-forward validation")
 
     best = optimize(train)[0]
-    out_of_sample = Backtester(strategy=TrendRsiAtrStrategy(best.config)).run(test)
+    out_of_sample = Backtester(strategy=TrendRsiAtrStrategy(best.config)).run(test, warmup=train)
     return best, out_of_sample
+
+
+def rolling_walk_forward(
+    candles: list[Candle], *, train_size: int = 200, test_size: int = 60, step_size: int | None = None
+) -> list[WalkForwardFold]:
+    """Deterministic, chronological folds; no test observation is used to select parameters."""
+    if train_size < 100 or test_size < 1:
+        raise ValueError("train_size must be >= 100 and test_size must be positive")
+    step = test_size if step_size is None else step_size
+    if step < test_size:
+        raise ValueError("Test windows must not overlap")
+    folds: list[WalkForwardFold] = []
+    for test_start in range(train_size, len(candles) - test_size + 1, step):
+        train = candles[test_start - train_size : test_start]
+        test = candles[test_start : test_start + test_size]
+        candidates = optimize(train)
+        if not candidates:
+            continue
+        selected = candidates[0]
+        result = Backtester(strategy=TrendRsiAtrStrategy(selected.config)).run(test, warmup=train)
+        folds.append(WalkForwardFold(test_start - train_size, test_start, test_start, test_start + test_size, selected, result))
+    if not folds:
+        raise ValueError("Need enough candles for at least one walk-forward fold")
+    return folds

@@ -19,6 +19,15 @@ class RiskManagerTests(unittest.TestCase):
 
         self.assertFalse(manager.can_trade())
 
+    def test_sizes_in_account_currency_and_halts_on_equity_drawdown(self) -> None:
+        signal = Signal(Side.BUY, entry=1.1, stop_loss=1.09, take_profit=1.12, reason="test")
+        usd = RiskManager(RiskConfig(starting_balance=10_000, risk_per_trade=0.01, quote_to_account_rate=1.0))
+        converted = RiskManager(RiskConfig(starting_balance=10_000, risk_per_trade=0.01, quote_to_account_rate=2.0))
+        self.assertEqual(usd.size_units(signal), 9_999)
+        self.assertEqual(converted.size_units(signal), 4_999)
+        usd.mark_equity(8_900)
+        self.assertFalse(usd.can_trade())
+
 
 if __name__ == "__main__":
     unittest.main()

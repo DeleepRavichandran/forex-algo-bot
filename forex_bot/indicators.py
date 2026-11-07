@@ -77,6 +77,8 @@ def atr(candles: list[Candle], period: int) -> list[float | None]:
 
 
 def _rsi_from_averages(avg_gain: float, avg_loss: float) -> float:
+    if avg_gain == 0 and avg_loss == 0:
+        return 50.0
     if avg_loss == 0:
         return 100.0
     relative_strength = avg_gain / avg_loss
